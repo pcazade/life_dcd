@@ -557,7 +557,7 @@ void Atom::corrComp(const vector<Atom>& atom,bool** u[],double** v[],
 
     int tt(0);
 
-    int kk,ll,m,n,mm,nn;
+    int kk,ll,mm,nn;
 
     double mass(0.);
     double ux(0.),uy(0.),uz(0.);
@@ -580,7 +580,20 @@ void Atom::corrComp(const vector<Atom>& atom,bool** u[],double** v[],
 
     for(int k=0; k<nResidC; k++)
     {
-
+      #pragma omp parallel default(none) \
+       private(test,tt,kk,ll,mm,nn,mass,ux,uy,uz,ax,ay,az,bx,by,bz,cx,cy,cz,dx,dy,dz,acomx,acomy,acomz,bcomx,bcomy,bcomz) \
+       shared(k,u,v,w,corr,nCorr,atom,box,nAtomC,nAtomS,nResidC,nResidS,nAtomCr,nAtomSr)
+      {
+	double* tmpCorr=new double[nFrame];
+	double* tmpNCorr=new double[nFrame];
+	
+	for(int i=0;i<nFrame;i++)
+	{
+	  tmpCorr[i]=0.;
+	  tmpNCorr[i]=0.;
+	}
+	
+	#pragma omp for nowait
         for(int l=0; l<nResidS; l++)
         {
 
@@ -694,15 +707,15 @@ void Atom::corrComp(const vector<Atom>& atom,bool** u[],double** v[],
 
                         if(test)
                         {
-                            corr[j-i]+=(double)(u[i][k][l]*u[j][k][l]);
-                            nCorr[j-i]+=1.;
+                            tmpCorr[j-i]+=(double)(u[i][k][l]*u[j][k][l]);
+                            tmpNCorr[j-i]+=1.;
                         }
                         else
                         {
 			    /*if((j-i)==0)
 			      cout << i << ' ' << j << ' ' << k << ' ' << nAtomCr << ' ' << l << ' ' << nAtomSr << ' ' << tt<< endl;*/
-                            corr[j-i]+=0.;
-                            nCorr[j-i]+=1.;
+                            tmpCorr[j-i]+=0.;
+                            tmpNCorr[j-i]+=1.;
                         }
 
                     } // for(int j=i;j<nFrame;j++)
@@ -712,6 +725,20 @@ void Atom::corrComp(const vector<Atom>& atom,bool** u[],double** v[],
             } // for(int i=0;i<nFrame;i++)
 
         } // for(int l=0;l<nResidS;l++)
+        
+        #pragma omp critical
+        {
+	  for(int i=0;i<nFrame;i++)
+	  {
+	    corr[i]+=tmpCorr[i];
+	    nCorr[i]+=tmpNCorr[i];
+	  }
+	}
+	
+	delete[] tmpCorr;
+	delete[] tmpNCorr;
+	
+      }// end of #omp
 
     } // for(int k=0;k<nResidC;k++)
 }
